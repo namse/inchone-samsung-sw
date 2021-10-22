@@ -48,23 +48,19 @@ class Position:
         self.col = col
 
 class GridIterator:
-    def __init__(self, index: int) -> None:
-        self.index = index
+    def __init__(self, position: Position) -> None:
+        self.position = position
 
 class Grid:
     def __init__(self, sideLength: int) -> None:
         self.sideLength = sideLength
-        ## self.stoneData[0] = Shark
-        self.stoneData = [0] * sideLength ** 2
+        self.stoneData = [[0 for _ in range(sideLength)] for _ in range(sideLength)]
         self.center = int((sideLength + 1) / 2)
 
     def getNextPosition(self, position: Position) -> Position or None:
         center = self.center
         col = position.col
         row = position.row
-
-        if col == center and row == center:
-            return Position(row, col - 1)
 
         if col == 1 and row == 1:
             return None
@@ -80,67 +76,39 @@ class Grid:
 
         return Position(row - 1, col)
 
-    def getIteratorFromPosition(self, targetPosition: Position) -> GridIterator:
-        index = 0
-        position = Position(self.center, self.center)
-
-        while position.row != targetPosition.row or position.col != targetPosition.col:
-            position = self.getNextPosition(position)
-            index += 1
-        
-        return GridIterator(index)
-
-    def getNextIterator(self, iterator: GridIterator) -> GridIterator or None:
-        nextIndex = iterator.index + 1
-        if self.sideLength ** 2 <= nextIndex:
-            return None
-        return GridIterator(nextIndex)
-
-    def getFirstIterator(self) -> GridIterator:
-        return GridIterator(1)
-
     def moveStonesForward(self) -> None:
         while True:
-            gridIterator = self.getFirstIterator()
+            stonePosition = Position(self.center, self.center - 1)
             isMovedAnyStone = False
             while True:
-                nextIterator = self.getNextIterator(gridIterator)
-                if nextIterator is None:
+                nextPosition = self.getNextPosition(stonePosition)
+                if nextPosition is None:
                     break
-                if self.getStoneValue(gridIterator) == 0 and self.getStoneValue(nextIterator) != 0: 
-                    nextPositionStoneValue = self.getStoneValue(nextIterator)
-                    self.setStoneValue(gridIterator, nextPositionStoneValue)
-                    self.setStoneValue(nextIterator, 0)
+                if self.getStoneValue(stonePosition) == 0 and self.getStoneValue(nextPosition) != 0: 
+                    nextPositionStoneValue = self.getStoneValue(nextPosition)
+                    self.setStoneValue(stonePosition, nextPositionStoneValue)
+                    self.setStoneValue(nextPosition, 0)
                     isMovedAnyStone = True
 
-                gridIterator = nextIterator
+                stonePosition = nextPosition
 
             if isMovedAnyStone == False:
                 break
-        
-    def setStoneValue(self, iteratorOrPosition: GridIterator or Position, value: int) -> None:
-        if isinstance(iteratorOrPosition, Position):
-            iterator = self.getIteratorFromPosition(iteratorOrPosition)
-        else:
-            iterator = iteratorOrPosition
-        self.stoneData[iterator.index] = value
+    def setStoneValue(self, position: Position, value: int) -> None:
+        self.stoneData[position.row - 1][position.col - 1] = value
 
-    def getStoneValue(self, iteratorOrPosition: GridIterator or Position) -> int:
-        if isinstance(iteratorOrPosition, Position):
-            iterator = self.getIteratorFromPosition(iteratorOrPosition)
-        else:
-            iterator = iteratorOrPosition
-
-        return self.stoneData[iterator.index]
+    def getStoneValue(self, position: Position) -> int:
+        return self.stoneData[position.row - 1][position.col - 1]
 
     def clear(self) -> None:
-        self.stoneData = [0] * self.sideLength ** 2
+        self.stoneData = [[0 for _ in range(self.sideLength)] for _ in range(self.sideLength)]
 
 class Direction(Enum):
     UP = 1
     DOWN = 2
     LEFT = 3
     RIGHT = 4
+
 
 class Magic:
     def __init__(self, direction: Direction, distance: int) -> None:
@@ -161,8 +129,7 @@ def getContextFromInput() -> Context:
         for col in range(1, sideLength + 1):
             stone = rowStoneData[col - 1]
             position = Position(row, col)
-            iterator = grid.getIteratorFromPosition(position)
-            grid.setStoneValue(iterator, stone)
+            grid.setStoneValue(position, stone)
     
     magics = []
     for _ in range(magicCount):
@@ -203,35 +170,37 @@ def moveStonesForward(context: Context) -> None:
     context.grid.moveStonesForward()
 
 def destory4ContiguousStones(context: Context) -> Dict[int, int]:
-    iterator = context.grid.getFirstIterator()
+    center = context.grid.center
+
+    position = Position(center, center - 1)
     
     destoriedStones = {1: 0, 2: 0, 3: 0}
 
-    while iterator is not None:
-        stoneValue = context.grid.getStoneValue(iterator)
+    while position is not None:
+        stoneValue = context.grid.getStoneValue(position)
 
         if stoneValue == 0:
-            iterator = context.grid.getNextIterator(iterator)
+            position = context.grid.getNextPosition(position)
             continue
         
         sameStoneCount = 1
-        nextIterator = context.grid.getNextIterator(iterator)
-        while nextIterator is not None:
-            nextPositionStoneValue = context.grid.getStoneValue(nextIterator)
+        nextPosition = context.grid.getNextPosition(position)
+        while nextPosition is not None:
+            nextPositionStoneValue = context.grid.getStoneValue(nextPosition)
             if nextPositionStoneValue != stoneValue:
                 break
             sameStoneCount += 1
-            nextIterator = context.grid.getNextIterator(nextIterator)
+            nextPosition = context.grid.getNextPosition(nextPosition)
         
         if sameStoneCount < 4:
-            iterator = nextIterator
+            position = nextPosition
             continue
 
         destoriedStones[stoneValue] += sameStoneCount
 
         for _ in range(sameStoneCount):
-            context.grid.setStoneValue(iterator, 0)
-            iterator = context.grid.getNextIterator(iterator)
+            context.grid.setStoneValue(position, 0)
+            position = context.grid.getNextPosition(position)
 
     return destoriedStones
 
@@ -246,28 +215,30 @@ class Group:
 
 def makeGroups(context: Context) -> List[Group]:
     groups: List[Group] = []
-    iterator = context.grid.getFirstIterator()
+    center = context.grid.center
 
-    while iterator is not None:
-        stoneValue = context.grid.getStoneValue(iterator)
+    position = Position(center, center - 1)
+
+    while position is not None:
+        stoneValue = context.grid.getStoneValue(position)
 
         if stoneValue == 0:
-            iterator = context.grid.getNextIterator(iterator)
+            position = context.grid.getNextPosition(position)
             continue
         
         sameStoneCount = 1
-        nextIterator = context.grid.getNextIterator(iterator)
-        while nextIterator is not None:
-            nextPositionStoneValue = context.grid.getStoneValue(nextIterator)
+        nextPosition = context.grid.getNextPosition(position)
+        while nextPosition is not None:
+            nextPositionStoneValue = context.grid.getStoneValue(nextPosition)
             if nextPositionStoneValue != stoneValue:
                 break
             sameStoneCount += 1
-            nextIterator = context.grid.getNextIterator(nextIterator)
+            nextPosition = context.grid.getNextPosition(nextPosition)
         
         group = Group(stoneValue, sameStoneCount)
         groups.append(group)
 
-        iterator = nextIterator
+        position = nextPosition
 
     return groups
 
@@ -282,13 +253,15 @@ def clearStones(context: Context) -> None:
     context.grid.clear()
 
 def fillStones(context: Context, stones: List[int]) -> None:
-    iterator = context.grid.getFirstIterator()
+    center = context.grid.center
+
+    position = Position(center, center - 1)
 
     for stone in stones:
-        if iterator is None:
+        if position is None:
             break
-        context.grid.setStoneValue(iterator, stone)
-        iterator = context.grid.getNextIterator(iterator)
+        context.grid.setStoneValue(position, stone)
+        position = context.grid.getNextPosition(position)
 
 
 # 격자 등 문제를 풀기 위한 정보를 가져온다.
@@ -314,16 +287,46 @@ for magic in context.magics:
     #   2. 구슬들을 앞으로 땡긴다.
     moveStonesForward(context)
 
+
+    print('-----AFTER PUSH FORWARD--------')
+    for row in range(1, context.grid.sideLength + 1):
+        line = ''
+        for col in range(1, context.grid.sideLength + 1):
+            position = Position(row, col)
+            stoneValue = context.grid.getStoneValue(position)
+            line += f"{stoneValue} "
+        print(line)
+
+    print('-------------\n\n\n\n')    
+
     while True:
         #   3. 4연속 구슬들 터트린다.
         destoriedStones = destory4ContiguousStones(context)
 
+        print('-------------')    
+        print(destoriedStones)
+
+
+        print('-------------')
+        for row in range(1, context.grid.sideLength + 1):
+            line = ''
+            for col in range(1, context.grid.sideLength + 1):
+                position = Position(row, col)
+                stoneValue = context.grid.getStoneValue(position)
+                line += f"{stoneValue} "
+            print(line)
+
+        print('-------------\n\n\n\n')    
+        
         #   3.1 터트린 구슬을 저장한다.
         addDestoriedStones(accumulatedDestoriedStones, destoriedStones)
 
         #   4. 만약 4연속 구슬 터진게 하나도 없으면 6으로 이동.
-
+        
+        for stoneValue in destoriedStones.values():
+            print(stoneValue)
         isNoStonesDestroyed = all([stoneValue == 0 for stoneValue in destoriedStones.values()])
+        print(f"isNoStonesDestroyed: {isNoStonesDestroyed}")
         if isNoStonesDestroyed:
             break
         
@@ -339,6 +342,7 @@ for magic in context.magics:
     clearStones(context)
     fillStones(context, stones)
 
+print(accumulatedDestoriedStones)
 
 firstStoneCount = accumulatedDestoriedStones[1]
 secondStoneCount = accumulatedDestoriedStones[2]
@@ -347,3 +351,12 @@ thirdStoneCount = accumulatedDestoriedStones[3]
 # 터트린 구슬들을 가지고
 # 1 * 1번구슬갯수 + 2 * 2번구슬갯수 + 3 * 3번구슬갯수 값을 출력한다.
 print(firstStoneCount * 1 + secondStoneCount * 2 + thirdStoneCount * 3)
+
+
+
+# allPositions = getAllPositions(context)
+
+# print(context.grid.center)
+
+# for position in allPositions:
+#     print(position.row, position.col)
